@@ -37,6 +37,19 @@ static constexpr int TAP_MAX_MOVE = 6;
 static constexpr int TAP_MAX_MS = 220;
 static constexpr uint32_t DOUBLE_TAP_MS = 250;
 static constexpr float SCROLL_PER_CLICK = 1.0f;
+static constexpr int SCROLL_DEAD = 0;  // スクロールデッドゾーン
+
+// 安全なエンコーダー読み取り関数
+long readEncoder() {
+  long result = M5Dial.Encoder.read();
+  
+  // 異常値をチェック（ハードウェアエラー対策）
+  if (result < -1000000L || result > 1000000L) {
+    result = encoderState.lastCount;
+  }
+  
+  return result;
+}
 
 void setup() {
   auto cfg = M5.config();
@@ -54,12 +67,8 @@ void setup() {
   
   // エンコーダー安全初期化
   delay(100);
-  try {
-    encoderState.init(0); // 安全に0で初期化
-    Serial.println("Encoder initialized");
-  } catch (...) {
-    Serial.println("Encoder init failed, skipping");
-  }
+  encoderState.init(readEncoder());
+  Serial.println("Encoder initialized safely");
 }
 
 void loop() {
@@ -152,27 +161,16 @@ void loop() {
       }
     }
     
-    // エンコーダーによるスクロール（一時的に無効化）
-    // TODO: エンコーダーが安定してから有効化
-    /*
-    static unsigned long lastEncoderCheck = 0;
-    if (millis() - lastEncoderCheck > 50) {
-      try {
-        long encNow = M5Dial.Encoder.read();
-        long delta = encNow - encoderState.lastCount;
-        
-        if (abs(delta) > 0 && abs(delta) < 100) {
-          int scroll = (int)(-delta * SCROLL_PER_CLICK);
-          bleMouse.move(0, 0, scroll, 0);
-          Serial.printf("Scroll: %d\n", scroll);
-          encoderState.lastCount = encNow;
-        }
-      } catch (...) {
-        Serial.println("Encoder read error, skipping");
-      }
-      lastEncoderCheck = millis();
+    // エンコーダーによる縦スクロール（安全実装）
+    long encNow = readEncoder();
+    long delta = encNow - encoderState.lastCount;
+    if (abs(delta) > SCROLL_DEAD) {
+      // 符号反転で自然なスクロール方向
+      int scroll = (int)(-delta * SCROLL_PER_CLICK);
+      bleMouse.move(0, 0, scroll, 0);
+      Serial.printf("Scroll: delta=%ld, scroll=%d\n", delta, scroll);
+      encoderState.lastCount = encNow;
     }
-    */
   }
   
   delay(5); // 高FPS化

@@ -1,13 +1,22 @@
 # M5Dial BLE Mouse
 
-M5DialをBluetooth Low Energy（BLE）マウスとして使用するためのArduinoスケッチです。
+M5DialをBluetooth Low Energy（BLE）マウスとして使用するためのArduinoスケッチです。タッチスクリーンとエンコーダーを使った直感的なマウス操作を実現します。
 
-## 機能
+## ✨ 機能
 
-- **ドラッグ操作** → マウスカーソル移動
+### 完全実装済み ✅
+- **ドラッグ操作** → マウスカーソル移動（感度調整済み）
 - **タップ** → 左クリック
 - **ダブルタップ** → 右クリック
-- **エンコーダー回転** → 縦スクロール（実装予定）
+- **エンコーダー回転** → 縦スクロール（安全実装）
+- **安定したBLE接続** - 高速レスポンス
+- **エラー耐性** - クラッシュ対策済み
+
+### 今後の機能（計画中） 🛠️
+- 🎛️ **設定 UI** - タッチスクリーンでの感度調整
+- 🌵 **接続成功音** - Bluetooth接続時のサウンド
+- 👁️ **目玉 UI** - 移動方向を示す可愛いインターフェース
+- ✨ **軌跡表示** - ドラッグ軌跡のグラフィック表示
 
 ## 必要なライブラリ
 
@@ -16,9 +25,10 @@ M5DialをBluetooth Low Energy（BLE）マウスとして使用するためのArd
 
 ## 動作環境
 
-- M5Dial
-- Arduino IDE
-- ESP32 Board Package
+- **ハードウェア**: M5Dial (ESP32-S3搭載)
+- **開発環境**: Arduino IDE 2.x 推奨
+- **ボードパッケージ**: esp32 by Espressif Systems
+- **テスト環境**: macOS (Windows/Linuxでも動作予定)
 
 ## 使用方法
 
@@ -27,14 +37,21 @@ M5DialをBluetooth Low Energy（BLE）マウスとして使用するためのArd
 3. デバイス（Mac/Windows/Linux）のBluetooth設定で「M5Dial BLE Mouse」をペアリング
 4. マウスとして動作開始
 
-## 設定パラメータ
+## ⚙️ 設定パラメータ
+
+コード内で調整可能なパラメータ:
 
 ```cpp
+// 基本操作設定
 static constexpr float MOUSE_GAIN = 2.5f;      // マウス感度
-static constexpr int DEADZONE = 1;             // デッドゾーン
-static constexpr int TAP_MAX_MOVE = 6;         // タップ判定移動量
-static constexpr int TAP_MAX_MS = 220;         // タップ判定時間
-static constexpr uint32_t DOUBLE_TAP_MS = 250; // ダブルタップ判定時間
+static constexpr int DEADZONE = 1;             // 微小移動無視闾値
+static constexpr int TAP_MAX_MOVE = 6;         // タップ判定移動量[px]
+static constexpr int TAP_MAX_MS = 220;         // タップ最大時間[ms]
+static constexpr uint32_t DOUBLE_TAP_MS = 250; // ダブルタップ間隔[ms]
+
+// スクロール設定
+static constexpr float SCROLL_PER_CLICK = 1.0f; // エンコーダースクロール感度
+static constexpr int SCROLL_DEAD = 0;          // スクロールデッドゾーン
 ```
 
 ## トラブルシューティング
@@ -50,20 +67,28 @@ static constexpr uint32_t DOUBLE_TAP_MS = 250; // ダブルタップ判定時間
 
 ### ビルド
 ```bash
-# Arduino IDEまたはPlatformIOでコンパイル
+# Arduino IDEでコンパイル
 ```
 
-### 開発状況
+### 📈 開発状況
+
+**Phase 1: 基本機能** ✅ **完了**
 - [x] 基本マウス移動
 - [x] 左クリック（タップ）
 - [x] 右クリック（ダブルタップ）
-- [ ] エンコーダースクロール（調整中）
-- [ ] 感度設定UI
+- [x] エンコーダー縦スクロール
+- [x] 安定性・エラー耐性
+
+**Phase 2: 使いやすさ向上** 🛠️
+- [ ] 設定UI実装
+- [ ] 接続状況表示改善
+
+**Phase 3: 遊び心機能** 🎮
+- [ ] 接続成功音（簡単・効果的）
+- [ ] 目玉UI（移動方向表示）
+- [ ] 軌跡表示（ドラッグ軌跡）
+- [ ] 統計表示（クリック数など）
 
 ## ライセンス
 
 MIT License
-
-## 貢献
-
-Issue、Pull Requestを歓迎します。
