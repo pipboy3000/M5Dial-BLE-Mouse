@@ -3,6 +3,57 @@
 
 BleMouse bleMouse("M5Dial BLE Mouse");
 
+// ---- LCD theme (readable mono look) ----
+bool lcdTheme = true; // toggle LCD theming
+uint16_t LCD_BG, LCD_FG, LCD_GHOST;
+
+void lcdInitColors() {
+  // light warm gray background, high-contrast ink, soft secondary
+  LCD_BG    = M5Dial.Display.color565(236, 238, 230);
+  LCD_FG    = M5Dial.Display.color565(12, 16, 12);
+  LCD_GHOST = M5Dial.Display.color565(128, 136, 128);
+}
+
+void lcdFillBackground() {
+  if (!lcdTheme) { M5Dial.Display.clear(BLACK); return; }
+  // solid background only (no border, no dithering) for readability on round screen
+  M5Dial.Display.fillScreen(LCD_BG);
+}
+
+// draw a thick rounded segment block
+static inline void lcdSeg(int x, int y, int w, int h, bool on) {
+  M5Dial.Display.fillRoundRect(x, y, w, h, 2, on ? LCD_FG : LCD_GHOST);
+}
+
+// 7-seg digit renderer (x,y top-left; s scale; d digit)
+void lcdDraw7SegDigit(int x, int y, int s, int d, bool ghost = false) {
+  bool segs[10][7] = {
+    {1,1,1,1,1,1,0},{0,1,1,0,0,0,0},{1,1,0,1,1,0,1},{1,1,1,1,0,0,1},{0,1,1,0,0,1,1},
+    {1,0,1,1,0,1,1},{1,0,1,1,1,1,1},{1,1,1,0,0,0,0},{1,1,1,1,1,1,1},{1,1,1,1,0,1,1}
+  };
+  int a = 3 * s; // segment thickness
+  int b = s;     // inner margin
+  auto draw = [&](int id, bool on) {
+    bool enable = on;
+    if (!on && ghost) { enable = true; }
+    switch (id) {
+      case 0: lcdSeg(x + b,       y,         4*s, a, enable); break; // top
+      case 1: lcdSeg(x + 4*s + b, y + b,     a,   4*s, enable); break; // top-right
+      case 2: lcdSeg(x + 4*s + b, y + 5*s+b, a,   4*s, enable); break; // bottom-right
+      case 3: lcdSeg(x + b,       y + 9*s,   4*s, a, enable); break; // bottom
+      case 4: lcdSeg(x,           y + 5*s+b, a,   4*s, enable); break; // bottom-left
+      case 5: lcdSeg(x,           y + b,     a,   4*s, enable); break; // top-left
+      case 6: lcdSeg(x + b,       y + 4*s,   4*s, a, enable); break; // middle
+    }
+  };
+  for (int i = 0; i < 7; ++i) draw(i, segs[d][i]);
+}
+
+void lcdDrawColon(int x, int y, int s) {
+  M5Dial.Display.fillCircle(x, y + 3*s, s, LCD_FG);
+  M5Dial.Display.fillCircle(x, y + 7*s, s, LCD_FG);
+}
+
 // タッチ状態管理
 struct TouchState {
   bool touching = false;
@@ -73,42 +124,43 @@ long readEncoder() {
 
 // 設定モード用UI表示
 void drawRotationSetup() {
-  M5Dial.Display.clear(BLACK);
+  lcdFillBackground();
   M5Dial.Display.setTextSize(2);
   
   // タイトル
   M5Dial.Display.setCursor(45, 20);
-  M5Dial.Display.setTextColor(YELLOW);
+  M5Dial.Display.setTextColor(lcdTheme ? LCD_FG : YELLOW);
   M5Dial.Display.println("ROTATION");
   M5Dial.Display.setCursor(65, 45);
   M5Dial.Display.println("SETUP");
   
   // 現在の回転角度表示
-  M5Dial.Display.setTextSize(3);
-  M5Dial.Display.setCursor(70, 80);
-  M5Dial.Display.setTextColor(WHITE);
   int rotationDegrees = rotationState.getRotationDegrees();
+  M5Dial.Display.setTextSize(4);
+  M5Dial.Display.setCursor(70, 78);
+  M5Dial.Display.setTextColor(lcdTheme ? LCD_FG : WHITE, lcdTheme ? LCD_BG : BLACK);
   M5Dial.Display.printf("%d", rotationDegrees);
   
   // 回転段階表示
   M5Dial.Display.setTextSize(1);
   M5Dial.Display.setCursor(20, 110);
-  M5Dial.Display.setTextColor(GREEN);
+  M5Dial.Display.setTextColor(lcdTheme ? LCD_GHOST : GREEN);
   M5Dial.Display.printf("Step: %d/4", rotationState.rotation + 1);
   
   // 回転パターン表示
   M5Dial.Display.setCursor(20, 125);
-  M5Dial.Display.setTextColor(CYAN);
+  M5Dial.Display.setTextColor(lcdTheme ? LCD_GHOST : CYAN);
   const char* rotationNames[] = {"Normal", "Right", "Upside", "Left"};
   M5Dial.Display.printf("Mode: %s", rotationNames[rotationState.rotation]);
   
   // 操作ガイド
   M5Dial.Display.setCursor(15, 155);
-  M5Dial.Display.setTextColor(ORANGE);
+  M5Dial.Display.setTextColor(lcdTheme ? LCD_FG : ORANGE);
   M5Dial.Display.println("Turn: 0→90→180→270");
   M5Dial.Display.setCursor(15, 170);
   M5Dial.Display.println("Hold: Save & Exit");
   M5Dial.Display.setCursor(15, 185);
+  M5Dial.Display.setTextColor(lcdTheme ? LCD_GHOST : ORANGE);
   M5Dial.Display.println("Simple & Clean");
   
   // ビジュアル回転インジケーター
@@ -118,9 +170,11 @@ void drawRotationSetup() {
   int endX = centerX + radius * cos(rad - PI/2);
   int endY = centerY + radius * sin(rad - PI/2);
   
-  M5Dial.Display.drawCircle(centerX, centerY, radius, WHITE);
-  M5Dial.Display.drawLine(centerX, centerY, endX, endY, RED);
-  M5Dial.Display.fillCircle(endX, endY, 3, RED);
+  uint16_t ring = lcdTheme ? LCD_GHOST : WHITE;
+  uint16_t needle = lcdTheme ? LCD_FG : RED;
+  M5Dial.Display.drawCircle(centerX, centerY, radius, ring);
+  M5Dial.Display.drawLine(centerX, centerY, endX, endY, needle);
+  M5Dial.Display.fillCircle(endX, endY, 3, needle);
 }
 
 // シンプル90度回転システム - 座標変換なし
@@ -133,8 +187,10 @@ void setup() {
   M5Dial.Display.setRotation(rotationState.rotation);
   
   M5Dial.Display.setBrightness(40);
-  M5Dial.Display.clear(BLACK);
+  lcdInitColors();
+  lcdFillBackground();
   M5Dial.Display.setCursor(40, 60);
+  if (lcdTheme) M5Dial.Display.setTextColor(LCD_FG, LCD_BG);
   M5Dial.Display.println("Minimal BLE Mouse");
   
   Serial.begin(115200);
@@ -178,30 +234,31 @@ void loop() {
                      rotationState.rotation, rotationState.getRotationDegrees());
         
         // 保存完了メッセージを表示
-        M5Dial.Display.clear(BLACK);
+        lcdFillBackground();
         M5Dial.Display.setTextSize(2);
         M5Dial.Display.setCursor(20, 60);
-        M5Dial.Display.setTextColor(GREEN);
+        M5Dial.Display.setTextColor(lcdTheme ? LCD_FG : GREEN);
         M5Dial.Display.println("Settings Saved!");
         delay(2000);
         
         // 接続状態画面に戻る
         if (bleMouse.isConnected()) {
-          M5Dial.Display.clear(BLACK);
+          lcdFillBackground();
           M5Dial.Display.setTextSize(2);
           M5Dial.Display.setCursor(40, 50);
-          M5Dial.Display.setTextColor(GREEN);
+          M5Dial.Display.setTextColor(lcdTheme ? LCD_FG : GREEN);
           M5Dial.Display.println("Connected!");
           
           M5Dial.Display.setTextSize(1);
           M5Dial.Display.setCursor(20, 90);
-          M5Dial.Display.setTextColor(YELLOW);
+          M5Dial.Display.setTextColor(lcdTheme ? LCD_GHOST : YELLOW);
           M5Dial.Display.println("Long press button");
           M5Dial.Display.setCursor(30, 105);
           M5Dial.Display.println("for rotation setup");
         } else {
-          M5Dial.Display.clear(BLACK);
+          lcdFillBackground();
           M5Dial.Display.setCursor(40, 60);
+          if (lcdTheme) M5Dial.Display.setTextColor(LCD_FG);
           M5Dial.Display.println("Waiting...");
         }
       }
@@ -251,23 +308,24 @@ void loop() {
     wasConnected = currentlyConnected;
     
     if (currentlyConnected) {
-      M5Dial.Display.clear(BLACK);
+      lcdFillBackground();
       M5Dial.Display.setTextSize(2);
       M5Dial.Display.setCursor(40, 50);
-      M5Dial.Display.setTextColor(GREEN);
+      M5Dial.Display.setTextColor(lcdTheme ? LCD_FG : GREEN);
       M5Dial.Display.println("Connected!");
       
       M5Dial.Display.setTextSize(1);
       M5Dial.Display.setCursor(20, 90);
-      M5Dial.Display.setTextColor(YELLOW);
+      M5Dial.Display.setTextColor(lcdTheme ? LCD_GHOST : YELLOW);
       M5Dial.Display.println("Long press button");
       M5Dial.Display.setCursor(30, 105);
       M5Dial.Display.println("for rotation setup");
       
       Serial.println("Basic connection test successful");
     } else {
-      M5Dial.Display.clear(BLACK);
+      lcdFillBackground();
       M5Dial.Display.setCursor(40, 60);
+      if (lcdTheme) M5Dial.Display.setTextColor(LCD_FG);
       M5Dial.Display.println("Waiting...");
     }
   }
