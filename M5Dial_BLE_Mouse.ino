@@ -62,10 +62,20 @@ struct TouchState {
   uint32_t touchStartMs = 0;
   uint32_t lastTapEndMs = 0;
   bool lastTapValid = false;
+  bool dragging = false;          // ドラッグ中
+  
+  void beginTouch(int x, int y) {
+    touching = true;
+    dragging = false;
+    startX = lastX = x;
+    startY = lastY = y;
+    touchStartMs = millis();
+  }
   
   void reset() {
     touching = false;
     lastTapValid = false;
+    dragging = false;
   }
 };
 
@@ -109,6 +119,14 @@ static constexpr int TAP_MAX_MS = 220;
 static constexpr uint32_t DOUBLE_TAP_MS = 250;
 static constexpr float SCROLL_PER_CLICK = 1.0f;
 static constexpr int SCROLL_DEAD = 0;  // スクロールデッドゾーン
+static constexpr uint32_t DRAG_HOLD_MS = 250;  // ドラッグ開始判定の長押し時間
+static constexpr int DRAG_MAX_PREMOVE = 6;     // ドラッグ開始前の許容移動px
+
+// ドラッグ時の視覚効果（表示+色反転）
+void setDragVisual(bool show) {
+  // 画面の色反転のみで明示（バッジは非表示）
+  M5Dial.Display.invertDisplay(show);
+}
 
 // 安全なエンコーダー読み取り関数
 long readEncoder() {
@@ -341,16 +359,27 @@ void loop() {
       
       if (!touchState.touching) {
         // タッチ開始
-        touchState.touching = true;
-        touchState.startX = touchState.lastX = x;
-        touchState.startY = touchState.lastY = y;
-        touchState.touchStartMs = millis();
+        touchState.beginTouch(x, y);
         Serial.printf("Touch start at (%d,%d)\n", x, y);
       }
       
       // 相対移動計算
       int dx = x - touchState.lastX;
       int dy = y - touchState.lastY;
+      
+      // ドラッグ開始判定（長押しかつ移動が小さい）
+      if (!touchState.dragging) {
+        uint32_t held = millis() - touchState.touchStartMs;
+        int premove = abs(x - touchState.startX) + abs(y - touchState.startY);
+        if (held >= DRAG_HOLD_MS && premove <= DRAG_MAX_PREMOVE) {
+          if (!bleMouse.isPressed(MOUSE_LEFT)) {
+            bleMouse.press(MOUSE_LEFT);
+          }
+          touchState.dragging = true;
+          setDragVisual(true);
+          Serial.println("DRAG_START");
+        }
+      }
       
       if (abs(dx) > DEADZONE || abs(dy) > DEADZONE) {
         // マウス移動（クリックなし）
@@ -364,11 +393,20 @@ void loop() {
       if (touchState.touching) {
         uint32_t dur = millis() - touchState.touchStartMs;
         int move = abs(touchState.lastX - touchState.startX) + abs(touchState.lastY - touchState.startY);
-        bool isTap = (dur <= TAP_MAX_MS && move <= TAP_MAX_MOVE);
+        bool wasDragging = touchState.dragging;
+        bool isTap = (!wasDragging && dur <= TAP_MAX_MS && move <= TAP_MAX_MOVE);
         
-        Serial.printf("Touch end: dur=%dms, move=%dpx, isTap=%s\n", dur, move, isTap ? "YES" : "NO");
+        Serial.printf("Touch end: dur=%dms, move=%dpx, dragging=%s, isTap=%s\n", dur, move, wasDragging ? "YES" : "NO", isTap ? "YES" : "NO");
         
-        if (isTap) {
+        if (wasDragging) {
+          // ドラッグ終了 → 左ボタン解放
+          if (bleMouse.isPressed(MOUSE_LEFT)) {
+            bleMouse.release(MOUSE_LEFT);
+          }
+          setDragVisual(false);
+          Serial.println("DRAG_END");
+          touchState.lastTapValid = false; // ドラッグ後はタップ扱いしない
+        } else if (isTap) {
           uint32_t now = millis();
           if (touchState.lastTapValid && (now - touchState.lastTapEndMs) <= DOUBLE_TAP_MS) {
             // ダブルタップ → 右クリック
@@ -393,6 +431,8 @@ void loop() {
         }
         
         touchState.touching = false;
+        touchState.dragging = false;
+        setDragVisual(false); // 念のためクリア
       }
     }
     
