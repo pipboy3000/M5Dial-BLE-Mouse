@@ -20,6 +20,20 @@ void lcdFillBackground() {
   M5Dial.Display.fillScreen(LCD_BG);
 }
 
+// 中央寄せテキスト描画ヘルパー（描画後はデータムをTLに戻す）
+void lcdDrawCentered(const char* text, int y, int size, uint16_t color) {
+  M5Dial.Display.setTextSize(size);
+  if (lcdTheme) {
+    M5Dial.Display.setTextColor(color, LCD_BG);
+  } else {
+    M5Dial.Display.setTextColor(color);
+  }
+  int cx = M5Dial.Display.width() / 2;
+  M5Dial.Display.setTextDatum(MC_DATUM);
+  M5Dial.Display.drawString(text, cx, y);
+  M5Dial.Display.setTextDatum(TL_DATUM);
+}
+
 // draw a thick rounded segment block
 static inline void lcdSeg(int x, int y, int w, int h, bool on) {
   M5Dial.Display.fillRoundRect(x, y, w, h, 2, on ? LCD_FG : LCD_GHOST);
@@ -140,59 +154,40 @@ long readEncoder() {
   return result;
 }
 
-// 設定モード用UI表示
+// 設定モード用UI表示（簡素版／英語）
 void drawRotationSetup() {
   lcdFillBackground();
+
+  // Title
   M5Dial.Display.setTextSize(2);
-  
-  // タイトル
-  M5Dial.Display.setCursor(45, 20);
   M5Dial.Display.setTextColor(lcdTheme ? LCD_FG : YELLOW);
-  M5Dial.Display.println("ROTATION");
-  M5Dial.Display.setCursor(65, 45);
-  M5Dial.Display.println("SETUP");
-  
-  // 現在の回転角度表示
-  int rotationDegrees = rotationState.getRotationDegrees();
-  M5Dial.Display.setTextSize(4);
-  M5Dial.Display.setCursor(70, 78);
-  M5Dial.Display.setTextColor(lcdTheme ? LCD_FG : WHITE, lcdTheme ? LCD_BG : BLACK);
-  M5Dial.Display.printf("%d", rotationDegrees);
-  
-  // 回転段階表示
+  // 丸型画面の端で欠けないように少し下げて内側に
+  M5Dial.Display.setCursor(42, 50);
+  M5Dial.Display.println("ROTATION SETUP");
+
+  // 角度を中央に大きく表示
+  int deg = rotationState.getRotationDegrees();
+  if (lcdTheme) M5Dial.Display.setTextColor(LCD_FG, LCD_BG);
+  M5Dial.Display.setTextSize(6);
+  // 桁数でざっくりセンターに寄せる
+  int y = 90;
+  int x;
+  int digits = (deg >= 100) ? 3 : (deg >= 10 ? 2 : 1);
+  switch (digits) {
+    case 3: x = 80; break;  // 180, 270
+    case 2: x = 96; break;  // 90
+    default: x = 108; break; // 0
+  }
+  M5Dial.Display.setCursor(x, y);
+  M5Dial.Display.printf("%d", deg);
+
+  // 操作ヒント（短く）
   M5Dial.Display.setTextSize(1);
-  M5Dial.Display.setCursor(20, 110);
-  M5Dial.Display.setTextColor(lcdTheme ? LCD_GHOST : GREEN);
-  M5Dial.Display.printf("Step: %d/4", rotationState.rotation + 1);
-  
-  // 回転パターン表示
-  M5Dial.Display.setCursor(20, 125);
-  M5Dial.Display.setTextColor(lcdTheme ? LCD_GHOST : CYAN);
-  const char* rotationNames[] = {"Normal", "Right", "Upside", "Left"};
-  M5Dial.Display.printf("Mode: %s", rotationNames[rotationState.rotation]);
-  
-  // 操作ガイド
-  M5Dial.Display.setCursor(15, 155);
-  M5Dial.Display.setTextColor(lcdTheme ? LCD_FG : ORANGE);
-  M5Dial.Display.println("Turn: 0→90→180→270");
-  M5Dial.Display.setCursor(15, 170);
+  M5Dial.Display.setTextColor(lcdTheme ? LCD_GHOST : YELLOW);
+  M5Dial.Display.setCursor(48, 150);
+  M5Dial.Display.println("Turn: 0/90/180/270");
+  M5Dial.Display.setCursor(48, 166);
   M5Dial.Display.println("Hold: Save & Exit");
-  M5Dial.Display.setCursor(15, 185);
-  M5Dial.Display.setTextColor(lcdTheme ? LCD_GHOST : ORANGE);
-  M5Dial.Display.println("Simple & Clean");
-  
-  // ビジュアル回転インジケーター
-  int centerX = 200, centerY = 100;
-  int radius = 25;
-  float rad = rotationState.getRotationDegrees() * PI / 180.0f;
-  int endX = centerX + radius * cos(rad - PI/2);
-  int endY = centerY + radius * sin(rad - PI/2);
-  
-  uint16_t ring = lcdTheme ? LCD_GHOST : WHITE;
-  uint16_t needle = lcdTheme ? LCD_FG : RED;
-  M5Dial.Display.drawCircle(centerX, centerY, radius, ring);
-  M5Dial.Display.drawLine(centerX, centerY, endX, endY, needle);
-  M5Dial.Display.fillCircle(endX, endY, 3, needle);
 }
 
 // シンプル90度回転システム - 座標変換なし
@@ -251,33 +246,21 @@ void loop() {
         Serial.printf("Rotation saved: %d×90 = %d\n", 
                      rotationState.rotation, rotationState.getRotationDegrees());
         
-        // 保存完了メッセージを表示
+        // 保存完了メッセージ（中央・簡略）＋反転で視覚フィードバック
+        M5Dial.Display.invertDisplay(true);
         lcdFillBackground();
-        M5Dial.Display.setTextSize(2);
-        M5Dial.Display.setCursor(20, 60);
-        M5Dial.Display.setTextColor(lcdTheme ? LCD_FG : GREEN);
-        M5Dial.Display.println("Settings Saved!");
-        delay(2000);
+        lcdDrawCentered("Saved", 110, 2, lcdTheme ? LCD_FG : GREEN);
+        delay(1500);
+        M5Dial.Display.invertDisplay(false);
         
         // 接続状態画面に戻る
         if (bleMouse.isConnected()) {
           lcdFillBackground();
-          M5Dial.Display.setTextSize(2);
-          M5Dial.Display.setCursor(40, 50);
-          M5Dial.Display.setTextColor(lcdTheme ? LCD_FG : GREEN);
-          M5Dial.Display.println("Connected!");
-          
-          M5Dial.Display.setTextSize(1);
-          M5Dial.Display.setCursor(20, 90);
-          M5Dial.Display.setTextColor(lcdTheme ? LCD_GHOST : YELLOW);
-          M5Dial.Display.println("Long press button");
-          M5Dial.Display.setCursor(30, 105);
-          M5Dial.Display.println("for rotation setup");
+          lcdDrawCentered("Connected!", 90, 2, lcdTheme ? LCD_FG : GREEN);
+          lcdDrawCentered("Setup: long press", 118, 1, lcdTheme ? LCD_GHOST : YELLOW);
         } else {
           lcdFillBackground();
-          M5Dial.Display.setCursor(40, 60);
-          if (lcdTheme) M5Dial.Display.setTextColor(LCD_FG);
-          M5Dial.Display.println("Waiting...");
+          lcdDrawCentered("Waiting...", 110, 2, lcdTheme ? LCD_FG : WHITE);
         }
       }
     }
@@ -327,24 +310,12 @@ void loop() {
     
     if (currentlyConnected) {
       lcdFillBackground();
-      M5Dial.Display.setTextSize(2);
-      M5Dial.Display.setCursor(40, 50);
-      M5Dial.Display.setTextColor(lcdTheme ? LCD_FG : GREEN);
-      M5Dial.Display.println("Connected!");
-      
-      M5Dial.Display.setTextSize(1);
-      M5Dial.Display.setCursor(20, 90);
-      M5Dial.Display.setTextColor(lcdTheme ? LCD_GHOST : YELLOW);
-      M5Dial.Display.println("Long press button");
-      M5Dial.Display.setCursor(30, 105);
-      M5Dial.Display.println("for rotation setup");
-      
+      lcdDrawCentered("Connected!", 90, 2, lcdTheme ? LCD_FG : GREEN);
+      lcdDrawCentered("Setup: long press", 118, 1, lcdTheme ? LCD_GHOST : YELLOW);
       Serial.println("Basic connection test successful");
     } else {
       lcdFillBackground();
-      M5Dial.Display.setCursor(40, 60);
-      if (lcdTheme) M5Dial.Display.setTextColor(LCD_FG);
-      M5Dial.Display.println("Waiting...");
+      lcdDrawCentered("Waiting...", 110, 2, lcdTheme ? LCD_FG : WHITE);
     }
   }
   
